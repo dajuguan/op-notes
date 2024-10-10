@@ -118,4 +118,5 @@ cp packages/contracts-bedrock/rollup_config.json op-node/rollup.json
   --l1.beacon=http://localhost:5052 
 ```
 
+## [Recording](https://us02web.zoom.us/rec/play/pePIX9tzxc3YA2OqbP-tPiEIR7upAon71SGmw34qnP7g0azWjpy6_ca0uURDfm7MNnNYi7NU66oiPeNs.PXZJaS5ZQHVr07fz?canPlayFromShare=true&from=share_recording_detail&continueMode=true&componentName=rec-play&originRequestUrl=https%3A%2F%2Fus02web.zoom.us%2Frec%2Fshare%2F6YQE-khKf-cQpCIsaNUw8gxCMhDByCxxfFmvE4lszAqqWJJOI9H8tQwWQoHYDHfV.xWqob3trZCXGVnqV)
 
