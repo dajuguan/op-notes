@@ -1,3 +1,5 @@
+# dependencies:
+# pip install web3 
 import os
 import json
 from dataclasses import dataclass
