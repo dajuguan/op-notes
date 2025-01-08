@@ -94,6 +94,11 @@ class Game:
         res = os.popen(cmd).read()
         return res
 
+    def list_claims(self):
+        cmd = fr"{OP_CHALLENGER} list-claims --l1-eth-rpc {L1_ETH_RPC} --game-address {self.GameAddr}"
+        res = os.popen(cmd).read()
+        return res
+
     def gameType(self):
         cmd = rf'cast call {self.GameAddr} "gameType()"'
         res = os.popen(cmd).read()
@@ -105,9 +110,9 @@ class Game:
         return GameStatus(int(res.strip(), 16))
 
     def maxGameDepth(self):
-        cmd = rf'cast call {self.GameAddr} "status()"'
+        cmd = rf'cast call {self.GameAddr} "maxGameDepth()"'
         res = os.popen(cmd).read()
-        return GameStatus(int(res.strip(), 16))
+        return res
 
     def attackToMaxDepth(self, privKey):
         print("attacking with false claim")
@@ -179,6 +184,7 @@ def createGame(OUTPUT_ROOT, L2_BLOCK_NUM, privKey):
     return Game(GameAddr=gameAddress, GameType=0, status=GameStatus.IN_PROGRESS)
 
 games = listGames()
+print(len(games))
 lastGame = games[-1:]
 pprint.pprint(lastGame)
 lastGame = lastGame[0]
