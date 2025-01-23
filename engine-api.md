@@ -14,6 +14,21 @@ CL:
 [2025-01-23 12:53:00]  INFO blockchain: Synced new block block=0x7979e0e7... epoch=213289 finalizedEpoch=213287 finalizedRoot=0x12fdbffb... slot=6825265
 [2025-01-23 12:53:00]  INFO blockchain: Finished applying state transition attestations=1 kzgCommitmentCount=5 payloadHash=0x8d7f52a6d313 slot=6825265 syncBitsCount=499 txCount=123
 ```
+
+## CL and EL
+The Merge was the implementation of the Bellatrix consensus (layer) specs, the Paris execution (layer) specs, and the Engine API.
+
+Bellatrix: https://github.com/ethereum/consensus-specs/tree/dev/specs/bellatrix
+
+Paris: https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/paris.md
+
+Paris mainly consists of EIP-3675.
+The interaction between the consensus layer and execution layer is specified by the Engine API: https://github.com/ethereum/execution-apis/tree/main/src/engine
+
+
+## Engine API
+- [Engine API: A Visual Guide](https://hackmd.io/@danielrachi/engine_api#EL-is-syncing)
+- [Node architecture](https://ethereum.org/en/developers/docs/nodes-and-clients/node-architecture/)
 ### EL Sync
 - state download
     - [state, accounts, slots, code](https://github.com/ethereum/go-ethereum/blob/5adc3148179744f54bf13ae1b60c18f12be0df5c/eth/protocols/snap/sync.go#L381)
