@@ -14,6 +14,7 @@ from enum import Enum
 # change it to your optimism path
 os.chdir("/root/test_nodes/opup/optimism")
 
+'''devnet
 L1_ETH_RPC = "http://localhost:8545"
 OP_CHALLENGER = rf"./op-challenger/bin/op-challenger"
 DEVNET_ADDRESS_JSON = ".devnet/addresses.json"
@@ -22,6 +23,14 @@ with open(DEVNET_ADDRESS_JSON) as f:
 DISPUTE_GAME_FACTORY_PROXY = devnetConfig["DisputeGameFactoryProxy"]
 DISPUTE_GAME_FACTORY=devnetConfig["DisputeGameFactory"]
 PRIV_KEY = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
+'''
+
+'''testnet'''
+L1_ETH_RPC = "http://88.99.30.186:8545"
+OP_CHALLENGER = rf"./op-challenger/bin/op-challenger"
+DISPUTE_GAME_FACTORY_PROXY = "0x4b2215d682208b2a598cb04270f96562f5ab225f"
+PRIV_KEY = "xxx"
+
 ABI = open(r"./packages/contracts-bedrock/snapshots/abi/FaultDisputeGame.json").read()
 ABI = json.loads(ABI)
 
