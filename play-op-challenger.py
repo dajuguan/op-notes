@@ -1,45 +1,14 @@
-# dependencies:
-# pip install web3
+#!/bin/python3
+# dependencies: cast, op-challenger
+import argparse
 import os
-import json
-import time
 from dataclasses import dataclass
-from web3 import Web3
-from web3.contract import Contract
-from eth_account import Account
-from web3.middleware import SignAndSendRawMiddlewareBuilder
-import pprint
 from enum import Enum
+import pprint
 
-# change it to your optimism path
-os.chdir("/root/test_nodes/opup/optimism")
-
-'''devnet
-L1_ETH_RPC = "http://localhost:8545"
-OP_CHALLENGER = rf"./op-challenger/bin/op-challenger"
-DEVNET_ADDRESS_JSON = ".devnet/addresses.json"
-with open(DEVNET_ADDRESS_JSON) as f:
-    devnetConfig = json.load(f)
-DISPUTE_GAME_FACTORY_PROXY = devnetConfig["DisputeGameFactoryProxy"]
-DISPUTE_GAME_FACTORY=devnetConfig["DisputeGameFactory"]
-PRIV_KEY = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
-'''
-
-'''testnet'''
-L1_ETH_RPC = "http://88.99.30.186:8545"
-OP_CHALLENGER = rf"./op-challenger/bin/op-challenger"
+OP_CHALLENGER = rf"/root/test_nodes/opup/optimism/op-challenger/bin/op-challenger"
+L1_RPC = "http://88.99.30.186:8545"
 DISPUTE_GAME_FACTORY_PROXY = "0x4b2215d682208b2a598cb04270f96562f5ab225f"
-PRIV_KEY = "xxx"
-
-ABI = open(r"./packages/contracts-bedrock/snapshots/abi/FaultDisputeGame.json").read()
-ABI = json.loads(ABI)
-
-w3 = Web3(Web3.HTTPProvider(L1_ETH_RPC))
-default_account = Account.from_key(PRIV_KEY)
-w3.eth.default_account = default_account
-w3.middleware_onion.inject(
-    SignAndSendRawMiddlewareBuilder.build(default_account), layer=0
-)
 
 class GameStatus(Enum):
     IN_PROGRESS = 0
@@ -49,122 +18,112 @@ class GameStatus(Enum):
 
 @dataclass
 class Game:
-    GameAddr: str
-    GameType: int
-    status: GameStatus | str
-    Index: int | None = None
+    gameAddr: str
+    status: GameStatus | str = GameStatus.IN_PROGRESS
+    gameType: int = 0  # 0:cannon, 1:permissoned, 255:fastgame
+    index: int | None = None
     created: str | None = None
     l2BlockNum: int | None = None
     rootClaim: str | None = None
-    claimCount: int | None = None
+    claimsCount: int | None = None
+    prestate: str | None = None
 
     def __post_init__(self):
-        # print("gameAddr:", self.GameAddr)
-        self.GameAddr = Web3.to_checksum_address(self.GameAddr)
-        self.contract = w3.eth.contract(address=self.GameAddr, abi=ABI)
+        if type(self.status) == str:
+            if "IN_PROGRESS" in self.status:
+                self.status = GameStatus.IN_PROGRESS
+            if "CHALLENGER_WINS" in self.status:
+                self.status = GameStatus.CHALLENGER_WINS
+            if "DEFENDER_WINS" in self.status:
+                self.status = GameStatus.DEFENDER_WINS
+        self.setAbsolutePrestate()
 
     def lenClaims(self):
-        res = self.contract.functions.claimDataLen().call(
-            {"from": default_account.address}
-        )
-        return res
+        cmd = rf'cast call {self.gameAddr} "claimDataLen()" --rpc-url {L1_RPC}'
+        res = os.popen(cmd).read()
+        res = res.strip()
+        return int(res, 16)
 
-    def move(self, claim, privKey, parentIndex=None):
+    def setAbsolutePrestate(self):
+        cmd = rf'cast call {self.gameAddr} "absolutePrestate()" --rpc-url {L1_RPC}'
+        res = os.popen(cmd).read()
+        res = res.strip()
+        self.prestate = res
+
+    def move(self, claim, pk, parentIndex=None):
         if parentIndex == None:
             parentIndex = self.lenClaims() - 1
-        print("parentIndex:", parentIndex)
-        if isinstance(claim, str):
-            if claim.startswith("0x"):
-                claim = claim[2:66]
-            if len(claim) < 64:
-                claim = claim.rjust(64, "0")
-            claim = bytes.fromhex(claim)
 
-        cmd = rf'''{OP_CHALLENGER} move --l1-eth-rpc {L1_ETH_RPC} --game-address {self.GameAddr} --attack --parent-index {parentIndex} --claim {claim} --private-key {privKey}  --mnemonic ""'''
+        cmd = rf'''{OP_CHALLENGER} move --l1-eth-rpc {L1_RPC} --game-address {self.gameAddr} --attack --parent-index {parentIndex} --claim {claim} --private-key {pk}  --mnemonic ""'''
         res = os.popen(cmd).read()
+        print(f"counter {parentIndex} with claim:", claim)
         print(f"counter {parentIndex} move resp:", res)
-        # failed using contract call directly
-        # disputedClaim = self.claimAt(parentIndex)
-        # tx_hash = self.contract.functions.attack(disputedClaim, parentIndex, claim).transact({"from": default_account.address})
-        # print("txhash:", tx_hash)
-        # tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-        # print("tx_receipt:", tx_receipt)
 
     def claimAt(self, index):
-        res = self.contract.functions.claimData(index).call(
-            {"from": default_account.address}
-        )[4]
-        res = res.hex()
-        print("claim at:", res)
-        return res
+        cmd = rf'cast call {self.gameAddr} "claimData(uint256)" {index} --rpc-url {L1_RPC}'
+        res = os.popen(cmd).read()
+        res = res.strip()[2:]
+        return {
+            "parentIndex": res[:64],
+            "counteredBy": res[64 : 64 * 2],
+            "claimant": res[64 * 2 : 64 * 3],
+            # bond:res[64*3:64*4],
+            "claim": res[64 * 4 : 64 * 5],
+            # position:res[64*5:64*6],
+            # clock:res[64*6:64*7]
+        }
 
     def absolutePrestate(self):
-        cmd = rf'cast call {self.GameAddr} "absolutePrestate()"'
+        cmd = rf'cast call {self.gameAddr} "absolutePrestate()" --rpc-url {L1_RPC}'
         res = os.popen(cmd).read()
-        return res
+        return res.strip()
 
     def list_claims(self):
-        cmd = fr"{OP_CHALLENGER} list-claims --l1-eth-rpc {L1_ETH_RPC} --game-address {self.GameAddr}"
+        cmd = rf"{OP_CHALLENGER} list-claims --l1-eth-rpc {L1_RPC} --game-address {self.gameAddr}"
         res = os.popen(cmd).read()
-        return res
+        return res.strip()
 
     def gameType(self):
-        cmd = rf'cast call {self.GameAddr} "gameType()"'
+        cmd = rf'cast call {self.gameAddr} "gameType()" --rpc-url {L1_RPC}'
         res = os.popen(cmd).read()
-        return res
+        return res.strip()
 
     def gameStatus(self):
-        cmd = rf'cast call {self.GameAddr} "status()"'
+        cmd = rf'cast call {self.gameAddr} "status()" --rpc-url {L1_RPC}'
         res = os.popen(cmd).read()
         return GameStatus(int(res.strip(), 16))
 
     def maxGameDepth(self):
-        cmd = rf'cast call {self.GameAddr} "maxGameDepth()"'
+        cmd = rf'cast call {self.gameAddr} "maxGameDepth()" --rpc-url {L1_RPC}'
         res = os.popen(cmd).read()
-        return res
+        return res.strip()
 
-    def attackToMaxDepth(self, privKey):
-        print("attacking with false claim")
+    def attackToMaxDepth(self, parent_index, maxdepth, pk):
         # create an false game, and attack with false claim when honest challenger responds
-        maxDepth = 50
-        depth = 0
+        maxDepth = maxdepth
+        depth = parent_index - 1
         while depth < maxDepth:
             curDepth = self.lenClaims() - 1
             if curDepth == depth + 1:
                 print("got op-challenger's move:", self.claimAt(curDepth))
-                print("gamestatus:", game.gameStatus())
-                randClaim = f"0x{curDepth}"
-                self.move(randClaim, privKey)
+                # the first 2 hex must be 01 or 02 to meet the _verifyExecBisectionRoot requirements
+                randClaim = f"0x012222222222222222222222222221022222222222222222222222222222{curDepth+10}01"
+                self.move(randClaim, pk)
                 depth += 2
-        print("reaching max depth, waiting for op-challenger to call step() and resolve()")
+        print(
+            """Max depth reached. Waiting for op-challenger (always honest) to:
+        1. Call step() and resolve() if rootClaim is honest.
+        2. Call resolve() (it's the dishonest actor's job to call step(), which will always revert) if rootClaim is dishonest.
+        """
+        )
 
 
-def gameCount():
-    cmd = rf'cast call {DISPUTE_GAME_FACTORY_PROXY} "gameCount()"'
-    res = os.popen(cmd).read()
-    res = res.strip()
-    return int(res, 16)
-
-
-def gameAtIndex(index):
-    cmd = rf'cast call {DISPUTE_GAME_FACTORY_PROXY} "gameAtIndex(uint256)" {index}'
-    res = os.popen(cmd).read()
-    res = res.strip()
-    gameType, timestamp, gameImpl = int(res[:66], 16), res[66:-40], "0x" + res[-40:]
-    cmd_status = rf'cast call {gameImpl} "status()"'
-    res = os.popen(cmd_status).read()
-    res = int(res.strip(), 16)
-    status = GameStatus(res)
-    return Game(GameAddr=gameImpl, GameType=gameType, status=status)
-
-
-def listGames():
-    cmd = rf"{OP_CHALLENGER} list-games --l1-eth-rpc {L1_ETH_RPC} --game-factory-address {DISPUTE_GAME_FACTORY_PROXY}"
-    print(cmd)
+def list_games(status, l1_rpc, fdg_addr, **kargs):
+    cmd = rf"{OP_CHALLENGER} list-games --l1-eth-rpc {l1_rpc} --game-factory-address {fdg_addr}"
     res = os.popen(cmd).read()
     res = res.strip()
     res = res.split("\n")
-    res = res[1:]  # remove the header and last line
+    res = res[1:]  # remove the header fields and last line
     games = []
     for line in res:
         idx = line[:4].strip()
@@ -180,31 +139,109 @@ def listGames():
             4 + 43 + 5 + 22 + 15 + 67 + 7 : 4 + 43 + 5 + 22 + 15 + 67 + 7 + 14
         ].strip()
         game = Game(
-            gameAddr, gameType, status, idx, created, l2BlockNum, rootClaim, claimsCount
+            gameAddr=gameAddr,
+            gameType=gameType,
+            status=status,
+            index=idx,
+            created=created,
+            l2BlockNum=l2BlockNum,
+            rootClaim=rootClaim,
+            claimsCount=claimsCount,
+            prestate=None,
         )
         games.append(game)
-    return games
+    if status != 0:
+        games = list(filter(lambda x: x.status == status, games))
 
-def createGame(OUTPUT_ROOT, L2_BLOCK_NUM, privKey):
-    cmd = rf"{OP_CHALLENGER} create-game --l1-eth-rpc {L1_ETH_RPC} --game-factory-address {DISPUTE_GAME_FACTORY_PROXY} --output-root {OUTPUT_ROOT} --l2-block-num {L2_BLOCK_NUM} --private-key {privKey}"
-    print(cmd)
-    res = os.popen(cmd).read()
-    gameAddress = res.strip()[-42:]
-    return Game(GameAddr=gameAddress, GameType=0, status=GameStatus.IN_PROGRESS)
+    pprint.pprint(games)
 
-games = listGames()
-print(len(games))
-lastGame = games[-1:]
-pprint.pprint(lastGame)
-lastGame = lastGame[0]
 
-# create a game with false outputroot
-incorrectOutput = "0xffff"
-game = createGame(incorrectOutput, lastGame.l2BlockNum, PRIV_KEY)
-print("createdDishonestGame:", game)
-print(game.absolutePrestate())
-print(game.gameType())
-print(game.lenClaims())
-print(game.gameStatus())
-# counter the claims submitted by honest op-challenger with random false claims until maxGameDepth
-game.attackToMaxDepth(PRIV_KEY)
+def attack_game_to_max_depth(game_addr, parent_index, maxdepth, pk, **kargs):
+    game = Game(gameAddr=game_addr)
+    game.attackToMaxDepth(parent_index, maxdepth, pk)
+
+def list_claims(game_addr, **kargs):
+    game = Game(gameAddr=game_addr)
+    claims = game.list_claims()
+    print(claims)
+
+
+def main():
+    global L1_RPC, OP_CHALLENGER
+    parser = argparse.ArgumentParser(description="Game management script")
+    parser.add_argument("--l1-rpc", type=str, default=L1_RPC, help="l1 EL rpc url")
+    parser.add_argument(
+        "--fdg-addr",
+        type=str,
+        default=DISPUTE_GAME_FACTORY_PROXY,
+        help="dispute game factory address",
+    )
+    parser.add_argument(
+        "--binpath",
+        type=str,
+        default=OP_CHALLENGER,
+        help="op-challenger absolute binary path",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    # Subparser for the list-games command
+    parser_list = subparsers.add_parser("list-games", help="List all games")
+    parser_list.add_argument(
+        "--status",
+        type=int,
+        default=1,
+        choices=[0, 1, 2, 3],
+        help="game status, 0:all, 1:in-progress, 2:challenger-wins, 3:defender-wins",
+    )
+    parser_list.set_defaults(func=list_games)
+
+    # Subparser for the attack command
+    parser_attack = subparsers.add_parser(
+        "attack-all",
+        help="Attack a game for every counter claim by honest challenger to maxDepth with random claim values",
+    )
+    parser_attack.add_argument(
+        "--game-addr",
+        type=str,
+        required=True,
+        help="contract address of the game to attack, eg:0x11",
+    )
+    parser_attack.add_argument(
+        "--pk", type=str, required=True, help="private key, eg:0x11"
+    )
+    parser_attack.add_argument(
+        "--parent-index", type=int, default=0, help="parent index to start attacking from, usually claimsCount-1"
+    )
+    parser_attack.add_argument(
+        "--maxdepth", type=int, default=50, help="maxGameDepth of the attack ending"
+    )
+    parser_attack.set_defaults(func=attack_game_to_max_depth)
+
+
+    # Subparser for the list-claims command
+    parser_claims = subparsers.add_parser(
+        "list-claims",
+        help="List claims for a given game",
+    )
+    parser_claims.add_argument(
+        "--game-addr",
+        type=str,
+        required=True,
+        help="contract address of the game to attack, eg:0x11",
+    )
+    parser_claims.set_defaults(func=list_claims)
+
+    args = parser.parse_args()
+    if args.l1_rpc:
+        L1_RPC = args.l1_rpc
+    if args.binpath:
+        OP_CHALLENGER = args.binpath
+    print("args==:", args)
+    if args.command:
+        args.func(**vars(args))
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

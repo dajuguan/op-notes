@@ -36,6 +36,7 @@ Beacon node data structures:
 - [Engine API: A Visual Guide](https://hackmd.io/@danielrachi/engine_api#EL-is-syncing)
 - [Node architecture](https://ethereum.org/en/developers/docs/nodes-and-clients/node-architecture/)
 - [engine_forkchoiceUpdatedWithWitnessV1: Verkle tree for statelessness](https://ethereum.org/en/roadmap/verkle-trees/#statelessness)
+
 ### EL Sync
 - state download
     - [state, accounts, slots, code](https://github.com/ethereum/go-ethereum/blob/5adc3148179744f54bf13ae1b60c18f12be0df5c/eth/protocols/snap/sync.go#L381)
